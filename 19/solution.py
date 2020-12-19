@@ -7,34 +7,45 @@ def read_input():
             yield line.strip()
 
 
-class Rule:
+class IRule:
+
+    def verify(self, message, rules):
+        raise NotImplementedError
+
+
+class Rule(IRule):
 
     def __init__(self, value=None, or_conditions=None):
         self.value = value
         self.or_conditions = or_conditions
 
     def verify(self, message, rules):
-        verified, cursor = self.verify_iter(message, rules, cursor=0)
-        return verified and cursor == len(message)
+        cursor = self.verify_iter(message, rules, cursor=0)
+        return cursor == len(message)
 
     def verify_iter(self, message, rules, cursor):
         if cursor >= len(message):
-            return False, -1
+            return -1
         if self.value is not None:
-            return message[cursor] == self.value, cursor+1
+            if message[cursor] == self.value:
+                return cursor + 1
+            else:
+                return -1
         else:
             for and_conditions in self.or_conditions:
                 verified = True
                 rule_cursor = cursor
                 for and_condition in and_conditions:
                     and_rule = rules[and_condition]
-                    rule_verified, rule_cursor = and_rule.verify_iter(message, rules, cursor=rule_cursor)
-                    if not rule_verified:
+                    rule_cursor = and_rule.verify_iter(message, rules, cursor=rule_cursor)
+                    if rule_cursor == -1:
                         verified = False
                         break
                 if verified:
-                    return True, rule_cursor
-            return False, -1
+                    return rule_cursor
+            return -1
+
+
 
 
 """
@@ -43,29 +54,29 @@ Verify the pattern
 8: 42 | 42 8
 11: 42 31 | 42 11 31
 """
-class RuleZero:
+class RuleZero(IRule):
 
-    def _verify(self, rule, message, rules, cursor):
+    def verify_star(self, rule, message, rules, cursor):
+        """
+        Verify the pattern rule*
+        """
         cursors = list()
-        verified = True
-        while verified and cursor < len(message):
-            verified, cursor = rule.verify_iter(message, rules, cursor=cursor)
-            if verified:
+        while -1 < cursor < len(message):
+            cursor = rule.verify_iter(message, rules, cursor=cursor)
+            if cursor > -1:
                 cursors.append(cursor)
         return cursors
 
     def verify(self, message, rules):
-        possible_head_cursors = self._verify(rules[42], message, rules, cursor=0)
-        for start_cursor in possible_head_cursors:
-            first_section_cursors = self._verify(rules[42], message, rules, cursor=start_cursor)
-            for n, section_cursor in enumerate(first_section_cursors):
-                n_matched = n + 1
-                conditions = [[31] * n_matched]
+        possible_head_cursors = self.verify_star(rules[42], message, rules, cursor=0)
+        for head_matches, start_cursor in enumerate(possible_head_cursors):
+            for n, section_cursor in enumerate(possible_head_cursors[head_matches+1:]):
+                section_matched = n + 1  # Times 42 matched that should be mirrored by 31 matches
+                conditions = [[31] * section_matched]
                 tmp_rule = Rule(or_conditions=conditions)
-                end_cursors = tmp_rule.verify_iter(message, rules, cursor=section_cursor)
-                for end_cursor in end_cursors:
-                    if end_cursor == len(message):
-                        return True
+                end_cursor = tmp_rule.verify_iter(message, rules, cursor=section_cursor)
+                if end_cursor == len(message):
+                    return True
         return False
 
 
